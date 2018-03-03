@@ -33,23 +33,14 @@ namespace Timezone
                 {
                     throw new ArgumentException();
                 }
-                int offset = 0;
-                this.wYear = BitConverter.ToInt16(byteArray, offset);
-                offset += 0x02;
-                this.wMonth = BitConverter.ToInt16(byteArray, offset);
-                offset += 0x02;
-                this.wDayOfWeek = BitConverter.ToInt16(byteArray, offset);
-                offset += 0x02;
-                this.wDay = BitConverter.ToInt16(byteArray, offset);
-                offset += 0x02;
-                this.wHour = BitConverter.ToInt16(byteArray, offset);
-                offset += 0x02;
-                this.wMinute = BitConverter.ToInt16(byteArray, offset);
-                offset += 0x02;
-                this.wSecond = BitConverter.ToInt16(byteArray, offset);
-                offset += 0x02;
-                this.wMilliseconds = BitConverter.ToInt16(byteArray, offset);
-                offset += 0x02;
+                this.wYear = BitConverter.ToInt16(byteArray, 0x00);
+                this.wMonth = BitConverter.ToInt16(byteArray, 0x02);
+                this.wDayOfWeek = BitConverter.ToInt16(byteArray, 0x04);
+                this.wDay = BitConverter.ToInt16(byteArray, 0x06);
+                this.wHour = BitConverter.ToInt16(byteArray, 0x08);
+                this.wMinute = BitConverter.ToInt16(byteArray, 0x0A);
+                this.wSecond = BitConverter.ToInt16(byteArray, 0x0C);
+                this.wMilliseconds = BitConverter.ToInt16(byteArray, 0x0E);
             }
         }
 
@@ -75,16 +66,11 @@ namespace Timezone
                 {
                     throw new ArgumentException();
                 }
-                int offset = 0;
-                this.Bias = BitConverter.ToInt32(byteArray, offset);
-                offset += 0x04;
-                this.StandardBias = BitConverter.ToInt32(byteArray, offset);
-                offset += 0x04;
-                this.DaylightBias = BitConverter.ToInt32(byteArray, offset);
-                offset += 0x04;
-                this.StandardDate = new SYSTEMTIME((new List<byte>(byteArray).GetRange(offset, 0x10)).ToArray());
-                offset += 0x10;
-                this.DaylightDate = new SYSTEMTIME((new List<byte>(byteArray).GetRange(offset, 0x10)).ToArray());
+                this.Bias = BitConverter.ToInt32(byteArray, 0x00);
+                this.StandardBias = BitConverter.ToInt32(byteArray, 0x04);
+                this.DaylightBias = BitConverter.ToInt32(byteArray, 0x08);
+                this.StandardDate = new SYSTEMTIME((new List<byte>(byteArray).GetRange(0x0c, 0x10)).ToArray());
+                this.DaylightDate = new SYSTEMTIME((new List<byte>(byteArray).GetRange(0x1c, 0x10)).ToArray());
 
                 this.StandardName = StandardName;
                 this.DaylightName = DaylightName;
@@ -112,24 +98,27 @@ namespace Timezone
             public uint HighPart;
         }
 
-        [DllImport("kernel32.dll", SetLastError = true)]
-        private static extern bool SetTimeZoneInformation([In] ref TIME_ZONE_INFORMATION lpTimeZoneInformation);
+        private static class NativeMethods
+        {
+            [DllImport("kernel32.dll", SetLastError = true)]
+            public static extern bool SetTimeZoneInformation([In] ref TIME_ZONE_INFORMATION lpTimeZoneInformation);
 
-        [DllImport("kernel32.dll")]
-        private static extern Int32 GetCurrentProcess();
+            [DllImport("kernel32.dll")]
+            public static extern IntPtr GetCurrentProcess();
 
-        [DllImport("kernel32.dll")]
-        private static extern bool CloseHandle(Int32 hObject);
+            [DllImport("kernel32.dll")]
+            public static extern bool CloseHandle(IntPtr hObject);
 
-        [DllImport("advapi32.dll")]
-        private static extern bool OpenProcessToken(Int32 ProcessHandle, UInt32 DesiredAccess, ref Int32 TokenHandle);
+            [DllImport("advapi32.dll")]
+            public static extern bool OpenProcessToken(IntPtr ProcessHandle, UInt32 DesiredAccess, out IntPtr TokenHandle);
 
-        [DllImport("advapi32.dll")]
-        private static extern bool AdjustTokenPrivileges(Int32 TokenHandle, bool DisableAllPrivileges,
-            [In] ref TOKEN_PRIVILEGES NewState, Int32 BufferLength, Int32 PreviousState, Int32 ReturnLength);
+            [DllImport("advapi32.dll")]
+            public static extern bool AdjustTokenPrivileges(IntPtr TokenHandle, bool DisableAllPrivileges,
+                [In] ref TOKEN_PRIVILEGES NewState, Int32 BufferLength, IntPtr PreviousState, IntPtr ReturnLength);
 
-        [DllImport("advapi32.dll", CharSet = CharSet.Auto)]
-        private static extern bool LookupPrivilegeValue(string lpSystemName, string lpName, out LUID lpLuid);
+            [DllImport("advapi32.dll", CharSet = CharSet.Unicode)]
+            public static extern bool LookupPrivilegeValue(string lpSystemName, string lpName, out LUID lpLuid);
+        }
 
         private const UInt32 TOKEN_QUERY = 0x08;
         private const UInt32 TOKEN_ADJUST_PRIVILEGES = 0x20;
@@ -184,7 +173,7 @@ namespace Timezone
             }
 
             EnablePrivileges();
-            result = SetTimeZoneInformation(ref selectedTimeZone);
+            result = NativeMethods.SetTimeZoneInformation(ref selectedTimeZone);
 
             var lastError = Marshal.GetLastWin32Error();
 
@@ -197,30 +186,30 @@ namespace Timezone
 
         private static void EnablePrivileges()
         {
-            Int32 tokenHandle = 0;
-            OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, ref tokenHandle);
+            IntPtr tokenHandle;
+            NativeMethods.OpenProcessToken(NativeMethods.GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, out tokenHandle);
             var tp = new TOKEN_PRIVILEGES
             {
                 Attributes = SE_PRIVILEGE_ENABLED,
                 PrivilegeCount = 1
             };
-            LookupPrivilegeValue(null, SE_TIME_ZONE_PRIVILEGE, out tp.Luid);
-            AdjustTokenPrivileges(tokenHandle, false, ref tp, 0, 0, 0);
-            CloseHandle(tokenHandle);
+            NativeMethods.LookupPrivilegeValue(null, SE_TIME_ZONE_PRIVILEGE, out tp.Luid);
+            NativeMethods.AdjustTokenPrivileges(tokenHandle, false, ref tp, 0, IntPtr.Zero, IntPtr.Zero);
+            NativeMethods.CloseHandle(tokenHandle);
         }
 
         private static void DisablePrivileges()
         {
-            Int32 tokenHandle = 0;
-            OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, ref tokenHandle);
+            IntPtr tokenHandle;
+            NativeMethods.OpenProcessToken(NativeMethods.GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, out tokenHandle);
             var tp = new TOKEN_PRIVILEGES
             {
                 // Attributes = NONE;
                 PrivilegeCount = 1
             };
-            LookupPrivilegeValue(null, SE_TIME_ZONE_PRIVILEGE, out tp.Luid);
-            AdjustTokenPrivileges(tokenHandle, false, ref tp, 0, 0, 0);
-            CloseHandle(tokenHandle);
+            NativeMethods.LookupPrivilegeValue(null, SE_TIME_ZONE_PRIVILEGE, out tp.Luid);
+            NativeMethods.AdjustTokenPrivileges(tokenHandle, false, ref tp, 0, IntPtr.Zero, IntPtr.Zero);
+            NativeMethods.CloseHandle(tokenHandle);
         }
     }
 }
