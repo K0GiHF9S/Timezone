@@ -139,15 +139,15 @@ namespace Timezone
 
         private static void EnablePrivileges()
         {
-            var result = OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, out IntPtr tokenHandle);
+            OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, out IntPtr tokenHandle);
             var tp = new TOKEN_PRIVILEGES
             {
                 Attributes = SE_PRIVILEGE_ENABLED,
                 PrivilegeCount = 1
             };
-            result = LookupPrivilegeValue(null, SE_TIME_ZONE_PRIVILEGE, out tp.Luid);
-            result = AdjustTokenPrivileges(tokenHandle, false, ref tp, 0, IntPtr.Zero, IntPtr.Zero);
-            result = CloseHandle(tokenHandle);
+            LookupPrivilegeValue(null, SE_TIME_ZONE_PRIVILEGE, out tp.Luid);
+            AdjustTokenPrivileges(tokenHandle, false, ref tp, 0, IntPtr.Zero, IntPtr.Zero);
+            CloseHandle(tokenHandle);
         }
 
         private static void DisablePrivileges()
