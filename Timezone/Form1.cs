@@ -11,8 +11,7 @@ namespace Timezone
 {
     public partial class TimeZoneSetting : Form
     {
-        private Dictionary<string, TIME_ZONE_INFORMATION> timeZoneList;
-        private TimeZone currentTimeZone = TimeZone.CurrentTimeZone;
+        private string currentTimeZoneId;
 
         public TimeZoneSetting()
         {
@@ -21,48 +20,26 @@ namespace Timezone
 
         private void TimeZoneSetting_Load(object sender, EventArgs e)
         {
-            var keyName = @"Software\Microsoft\Windows NT\CurrentVersion\Time Zones";
-            var registryKey = Registry.LocalMachine.OpenSubKey(keyName);
-            var subKeyNameList = new List<string>(registryKey.GetSubKeyNames());
-            subKeyNameList.Sort();
-
+            var timeZoneIdList = TimeZoneInfo.GetTimeZoneIdList();
             this.timeZoneComboBox.Items.Clear();
-            timeZoneList = new Dictionary<string, TIME_ZONE_INFORMATION>();
-            var currentStandardName = currentTimeZone.StandardName;
-            foreach (var subKeyName in subKeyNameList)
+            foreach (var timeZoneId in timeZoneIdList)
             {
-                this.timeZoneComboBox.Items.Add(subKeyName);
-
-                var subKey = registryKey.OpenSubKey(subKeyName);
-                var standardName = subKey.GetValue("Std").ToString();
-                var daylightName = subKey.GetValue("Dlt").ToString();
-                var tzi = (byte[])subKey.GetValue("TZI");
-                subKey.Close();
-
-                var timeZoneInformation = new TIME_ZONE_INFORMATION(tzi, standardName, daylightName);
-                timeZoneList.Add(subKeyName, timeZoneInformation);
-
-                if (currentStandardName == standardName)
-                {
-                    this.timeZoneComboBox.SelectedIndex = timeZoneList.Count - 1;
-                }
+                this.timeZoneComboBox.Items.Add(timeZoneId);
             }
-            registryKey.Close();
             
-            var dateTimeOffset = DateTimeOffset.Now;
+            currentTimeZoneId = TimeZoneInfo.GetCurrentTimeZoneId();
+            this.timeZoneComboBox.SelectedIndex = timeZoneIdList.IndexOf(currentTimeZoneId);
         }
 
         private void okButton_Click(object sender, EventArgs e)
         {
-            TIME_ZONE_INFORMATION selectedTimeZone;
             var selectedString = this.timeZoneComboBox.SelectedItem.ToString();
-            var result =
-                timeZoneList.TryGetValue(selectedString, out selectedTimeZone);
-            if (result && currentTimeZone.StandardName != selectedTimeZone.StandardName)
+            if (selectedString != null && selectedString != currentTimeZoneId)
             {
-                MessageBox.Show("Change");
-                TimeZoneInfo.SetTimeZoneInformation(timeZoneList[selectedString]);
-                currentTimeZone = TimeZone.CurrentTimeZone;
+                if (TimeZoneInfo.SetTimeZoneInformation(selectedString) == 0)
+                {
+                    currentTimeZoneId = selectedString;
+                }
             }
         }
     }
