@@ -95,34 +95,44 @@ namespace Timezone
         {
             [MarshalAs(UnmanagedType.U4)]
             public UInt32 PrivilegeCount;
-            [MarshalAs(UnmanagedType.I8)]
-            public Int64 Luid;
+
+            public LUID Luid;
             [MarshalAs(UnmanagedType.U4)]
             public UInt32 Attributes;
+        }
+
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct LUID
+        {
+            [MarshalAs(UnmanagedType.U4)]
+            public uint LowPart;
+            [MarshalAs(UnmanagedType.U4)]
+            public uint HighPart;
         }
 
         [DllImport("kernel32.dll", SetLastError = true)]
         private static extern bool SetTimeZoneInformation([In] ref TIME_ZONE_INFORMATION lpTimeZoneInformation);
 
         [DllImport("kernel32.dll")]
-        private static extern IntPtr GetCurrentProcess();
+        private static extern Int32 GetCurrentProcess();
 
         [DllImport("kernel32.dll")]
-        private static extern bool CloseHandle(IntPtr hObject);
+        private static extern bool CloseHandle(Int32 hObject);
 
         [DllImport("advapi32.dll")]
-        private static extern bool OpenProcessToken(IntPtr ProcessHandle, UInt32 DesiredAccess, out IntPtr TokenHandle);
+        private static extern bool OpenProcessToken(Int32 ProcessHandle, UInt32 DesiredAccess, ref Int32 TokenHandle);
 
         [DllImport("advapi32.dll")]
-        private static extern bool AdjustTokenPrivileges(IntPtr TokenHandle, bool DisableAllPrivileges,
-            [In] ref TOKEN_PRIVILEGES NewState, Int32 BufferLength, IntPtr PreviousState, IntPtr ReturnLength);
+        private static extern bool AdjustTokenPrivileges(Int32 TokenHandle, bool DisableAllPrivileges,
+            [In] ref TOKEN_PRIVILEGES NewState, Int32 BufferLength, Int32 PreviousState, Int32 ReturnLength);
 
         [DllImport("advapi32.dll", CharSet = CharSet.Auto)]
-        public static extern bool LookupPrivilegeValue(string lpSystemName, string lpName, out Int64 lpLuid);
+        public static extern bool LookupPrivilegeValue(string lpSystemName, string lpName, out LUID lpLuid);
 
-        public const int TOKEN_QUERY = 0x08;
-        public const int TOKEN_ADJUST_PRIVILEGES = 0x20;
-        public const int SE_PRIVILEGE_ENABLED = 0x02;
+        public const UInt32 TOKEN_QUERY = 0x08;
+        public const UInt32 TOKEN_ADJUST_PRIVILEGES = 0x20;
+        public const UInt32 SE_PRIVILEGE_ENABLED = 0x02;
         public const string SE_TIME_ZONE_PRIVILEGE = "SeTimeZonePrivilege";
 
         public static int SetTimeZoneInformation(TIME_ZONE_INFORMATION tzi)
@@ -134,32 +144,36 @@ namespace Timezone
 
             DisablePrivileges();
 
+            System.Globalization.CultureInfo.CurrentCulture.ClearCachedData();
+
             return lastError;
         }
 
         private static void EnablePrivileges()
         {
-            OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, out IntPtr tokenHandle);
+            Int32 tokenHandle = 0;
+            OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, ref tokenHandle);
             var tp = new TOKEN_PRIVILEGES
             {
                 Attributes = SE_PRIVILEGE_ENABLED,
                 PrivilegeCount = 1
             };
             LookupPrivilegeValue(null, SE_TIME_ZONE_PRIVILEGE, out tp.Luid);
-            AdjustTokenPrivileges(tokenHandle, false, ref tp, 0, IntPtr.Zero, IntPtr.Zero);
+            AdjustTokenPrivileges(tokenHandle, false, ref tp, 0, 0, 0);
             CloseHandle(tokenHandle);
         }
 
         private static void DisablePrivileges()
         {
-            OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, out IntPtr tokenHandle);
+            Int32 tokenHandle = 0;
+            OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, ref tokenHandle);
             var tp = new TOKEN_PRIVILEGES
             {
                 // Attributes = NONE;
                 PrivilegeCount = 1
             };
             LookupPrivilegeValue(null, SE_TIME_ZONE_PRIVILEGE, out tp.Luid);
-            AdjustTokenPrivileges(tokenHandle, false, ref tp, 0, IntPtr.Zero, IntPtr.Zero);
+            AdjustTokenPrivileges(tokenHandle, false, ref tp, 0, 0, 0);
             CloseHandle(tokenHandle);
         }
     }

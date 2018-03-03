@@ -22,32 +22,32 @@ namespace Timezone
         private void TimeZoneSetting_Load(object sender, EventArgs e)
         {
             var keyName = @"Software\Microsoft\Windows NT\CurrentVersion\Time Zones";
-            var registryKey = Registry.LocalMachine.OpenSubKey(keyName);
-            var subKeyNameList = new List<string>(registryKey.GetSubKeyNames());
-            subKeyNameList.Sort();
-
-            this.timeZoneComboBox.Items.Clear();
-            timeZoneList = new Dictionary<string, TIME_ZONE_INFORMATION>();
-            var currentStandardName = currentTimeZone.StandardName;
-            foreach (var subKeyName in subKeyNameList)
+            using (var registryKey = Registry.LocalMachine.OpenSubKey(keyName))
             {
-                this.timeZoneComboBox.Items.Add(subKeyName);
+                var subKeyNameList = new List<string>(registryKey.GetSubKeyNames());
+                subKeyNameList.Sort();
 
-                var subKey = registryKey.OpenSubKey(subKeyName);
-                var standardName = subKey.GetValue("Std").ToString();
-                var daylightName = subKey.GetValue("Dlt").ToString();
-                var tzi = (byte[])subKey.GetValue("TZI");
-                subKey.Close();
-
-                var timeZoneInformation = new TIME_ZONE_INFORMATION(tzi, standardName, daylightName);
-                timeZoneList.Add(subKeyName, timeZoneInformation);
-
-                if (currentStandardName == standardName)
+                this.timeZoneComboBox.Items.Clear();
+                timeZoneList = new Dictionary<string, TIME_ZONE_INFORMATION>();
+                var currentStandardName = currentTimeZone.StandardName;
+                foreach (var subKeyName in subKeyNameList)
                 {
-                    this.timeZoneComboBox.SelectedIndex = timeZoneList.Count - 1;
+                    this.timeZoneComboBox.Items.Add(subKeyName);
+
+                    using (var subKey = registryKey.OpenSubKey(subKeyName))
+                    {
+                        var standardName = subKey.GetValue("Std").ToString();
+                        var daylightName = subKey.GetValue("Dlt").ToString();
+                        var tzi = (byte[])subKey.GetValue("TZI");
+                        var timeZoneInformation = new TIME_ZONE_INFORMATION(tzi, standardName, daylightName);
+                        timeZoneList.Add(subKeyName, timeZoneInformation);
+                        if (currentStandardName == standardName)
+                        {
+                            this.timeZoneComboBox.SelectedIndex = timeZoneList.Count - 1;
+                        }
+                    }
                 }
             }
-            registryKey.Close();
             
             var dateTimeOffset = DateTimeOffset.Now;
         }
@@ -60,7 +60,6 @@ namespace Timezone
                 timeZoneList.TryGetValue(selectedString, out selectedTimeZone);
             if (result && currentTimeZone.StandardName != selectedTimeZone.StandardName)
             {
-                MessageBox.Show("Change");
                 TimeZoneInfo.SetTimeZoneInformation(timeZoneList[selectedString]);
                 currentTimeZone = TimeZone.CurrentTimeZone;
             }
